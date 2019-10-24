@@ -29,6 +29,7 @@ func TestLabel_Text(t *testing.T) {
 
 func TestLabel_SetText(t *testing.T) {
 	label := &Label{Text: "Test"}
+	label.SetText("Crashy")
 	Refresh(label)
 	label.SetText("New")
 
@@ -81,4 +82,14 @@ func TestText_MinSizeAdjustsWithContent(t *testing.T) {
 	text.SetText("Line 1\nLine 2\n")
 	assert.Equal(t, initialMin, text.MinSize())
 	assert.Equal(t, initialMin, text.textProvider.MinSize())
+}
+
+func TestLabel_ApplyTheme(t *testing.T) {
+	text := NewLabel("Line 1")
+	text.Hide()
+
+	render := Renderer(text).(*textRenderer)
+	assert.Equal(t, theme.TextColor(), render.texts[0].Color)
+	text.Show()
+	assert.Equal(t, theme.TextColor(), render.texts[0].Color)
 }

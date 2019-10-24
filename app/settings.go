@@ -33,6 +33,7 @@ type settings struct {
 
 	listenerLock    sync.Mutex
 	changeListeners []chan fyne.Settings
+	watcher         *fsnotify.Watcher
 
 	schema SettingsSchema
 }
@@ -89,7 +90,6 @@ func (s *settings) loadFromFile(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			os.MkdirAll(filepath.Dir(path), 0700)
 			return nil
 		}
 		return err
@@ -112,8 +112,10 @@ func (s *settings) setupTheme() {
 
 	if name == "light" {
 		s.SetTheme(theme.LightTheme())
-	} else {
+	} else if name == "dark" {
 		s.SetTheme(theme.DarkTheme())
+	} else {
+		s.SetTheme(defaultTheme())
 	}
 }
 
@@ -124,12 +126,17 @@ func watchFileAddTarget(watcher *fsnotify.Watcher, path string) {
 	}
 }
 
-func watchFile(path string, callback func()) {
+func watchFile(path string, callback func()) *fsnotify.Watcher {
 	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fyne.LogError("Failed to watch settings file:", err)
+		return nil
+	}
 
 	go func() {
 		for event := range watcher.Events {
 			if event.Op&fsnotify.Remove != 0 { // if it was deleted then watch again
+				watcher.Remove(path)
 				watchFileAddTarget(watcher, path)
 			} else {
 				callback()
@@ -143,16 +150,24 @@ func watchFile(path string, callback func()) {
 	}()
 
 	watchFileAddTarget(watcher, path)
+	return watcher
 }
 
 func (s *settings) watchSettings() {
-	watchFile(s.schema.StoragePath(), s.fileChanged)
+	s.watcher = watchFile(s.schema.StoragePath(), s.fileChanged)
+}
+
+func (s *settings) stopWatching() {
+	if s.watcher == nil {
+		return
+	}
+
+	s.watcher.Close()
 }
 
 func loadSettings() *settings {
 	s := &settings{}
 	s.load()
 
-	s.watchSettings()
 	return s
 }

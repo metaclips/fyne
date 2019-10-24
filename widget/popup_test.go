@@ -61,15 +61,35 @@ func TestPopUp_Move(t *testing.T) {
 func TestPopUp_Move_Constrained(t *testing.T) {
 	label := NewLabel("Hi")
 	win := test.NewWindow(NewLabel("OK"))
-	win.Resize(fyne.NewSize(50, 30))
+	win.Resize(fyne.NewSize(60, 40))
 	pop := NewPopUp(label, win.Canvas())
 
-	pos := fyne.NewPos(10, 10)
+	pos := fyne.NewPos(30, 20)
 	pop.Move(pos)
 
 	innerPos := pop.Content.Position()
-	assert.Equal(t, pos.X+theme.Padding(), innerPos.X)
-	assert.Equal(t, win.Canvas().Size().Height-pop.Content.Size().Height-theme.Padding(), innerPos.Y)
+	assert.Less(t, innerPos.X-theme.Padding(), pos.X,
+		"content X position is adjusted to keep the content inside the window")
+	assert.Less(t, innerPos.Y-theme.Padding(), pos.Y,
+		"content Y position is adjusted to keep the content inside the window")
+	assert.Equal(t, win.Canvas().Size().Width-pop.Content.Size().Width-theme.Padding(), innerPos.X,
+		"content X position is adjusted to keep the content inside the window")
+	assert.Equal(t, win.Canvas().Size().Height-pop.Content.Size().Height-theme.Padding(), innerPos.Y,
+		"content Y position is adjusted to keep the content inside the window")
+}
+
+func TestPopUp_Move_ConstrainedWindowToSmall(t *testing.T) {
+	label := NewLabel("Hi")
+	win := test.NewWindow(NewLabel("OK"))
+	win.Resize(fyne.NewSize(10, 5))
+	pop := NewPopUp(label, win.Canvas())
+
+	pos := fyne.NewPos(20, 10)
+	pop.Move(pos)
+
+	innerPos := pop.Content.Position()
+	assert.Equal(t, theme.Padding(), innerPos.X, "content X position is adjusted but the window is too small")
+	assert.Equal(t, theme.Padding(), innerPos.Y, "content Y position is adjusted but the window is too small")
 }
 
 func TestPopUp_Tapped(t *testing.T) {
@@ -82,12 +102,32 @@ func TestPopUp_Tapped(t *testing.T) {
 	assert.Nil(t, test.Canvas().Overlay())
 }
 
+func TestPopUp_TappedSecondary(t *testing.T) {
+	label := NewLabel("Hi")
+	pop := NewPopUp(label, test.Canvas())
+
+	assert.True(t, pop.Visible())
+	test.TapSecondary(pop)
+	assert.False(t, pop.Visible())
+	assert.Nil(t, test.Canvas().Overlay())
+}
+
 func TestModalPopUp_Tapped(t *testing.T) {
 	label := NewLabel("Hi")
 	pop := NewModalPopUp(label, test.Canvas())
 
 	assert.True(t, pop.Visible())
 	test.Tap(pop)
+	assert.True(t, pop.Visible())
+	assert.Equal(t, pop, test.Canvas().Overlay())
+}
+
+func TestModalPopUp_TappedSecondary(t *testing.T) {
+	label := NewLabel("Hi")
+	pop := NewModalPopUp(label, test.Canvas())
+
+	assert.True(t, pop.Visible())
+	test.TapSecondary(pop)
 	assert.True(t, pop.Visible())
 	assert.Equal(t, pop, test.Canvas().Overlay())
 }

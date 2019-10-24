@@ -2,12 +2,10 @@ package widget
 
 import (
 	"fmt"
-	"image/color"
 	"testing"
 	"time"
 
 	"fyne.io/fyne"
-	"fyne.io/fyne/canvas"
 	"fyne.io/fyne/test"
 	"fyne.io/fyne/theme"
 	"github.com/stretchr/testify/assert"
@@ -162,17 +160,10 @@ func TestButtonRenderer_Layout_NoText(t *testing.T) {
 	button := NewButtonWithIcon("", theme.CancelIcon(), nil)
 	render := Renderer(button).(*buttonRenderer)
 
-	width := button.MinSize().Width + 20
-	height := button.MinSize().Height + 20
-	button.Resize(fyne.NewSize(width, height))
+	button.Resize(fyne.NewSize(100, 100))
 
-	iconOffset := 0
-	if theme.IconInlineSize() < theme.TextSize() {
-		iconOffset = (canvas.NewText("", color.White).MinSize().Height - theme.IconInlineSize()) / 2
-	}
-
-	assert.Equal(t, theme.Padding()+10-(theme.IconInlineSize()/2), render.icon.Position().X)
-	assert.Equal(t, theme.Padding()+10+iconOffset, render.icon.Position().Y)
+	assert.Equal(t, 50-theme.IconInlineSize()/2, render.icon.Position().X)
+	assert.Equal(t, 50-theme.IconInlineSize()/2, render.icon.Position().Y)
 }
 
 func TestButton_Disable(t *testing.T) {
@@ -226,4 +217,18 @@ func TestButton_Disabled(t *testing.T) {
 	assert.True(t, button.Disabled())
 	button.Enable()
 	assert.False(t, button.Disabled())
+}
+
+func TestButtonRenderer_ApplyTheme(t *testing.T) {
+	button := &Button{}
+	render := Renderer(button).(*buttonRenderer)
+
+	textSize := render.label.TextSize
+	customTextSize := textSize
+	withTestTheme(func() {
+		render.ApplyTheme()
+		customTextSize = render.label.TextSize
+	})
+
+	assert.NotEqual(t, textSize, customTextSize)
 }

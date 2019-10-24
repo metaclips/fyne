@@ -54,7 +54,7 @@ func (b *buttonRenderer) Layout(size fyne.Size) {
 			b.shadow.Resize(size)
 		}
 	}
-	if b.label != nil {
+	if b.button.Text != "" {
 		padding := b.padding()
 		innerSize := size.Subtract(padding)
 		innerOffset := fyne.NewPos(padding.Width/2, padding.Height/2)
@@ -79,6 +79,7 @@ func (b *buttonRenderer) Layout(size fyne.Size) {
 
 // ApplyTheme is called when the Button may need to update its look
 func (b *buttonRenderer) ApplyTheme() {
+	b.label.TextSize = theme.TextSize()
 	b.label.Color = theme.TextColor()
 	if b.button.Disabled() {
 		b.label.Color = theme.DisabledTextColor()

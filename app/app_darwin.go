@@ -1,12 +1,22 @@
 // +build !ci
 
+// +build !mobile,!ios
+
 package app
 
 import (
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"fyne.io/fyne"
+	"fyne.io/fyne/theme"
 )
+
+func defaultTheme() fyne.Theme {
+	// TODO read the macOS setting in Mojave onwards
+	return theme.DarkTheme()
+}
 
 func rootConfigDir() string {
 	homeDir, _ := os.UserHomeDir()

@@ -73,7 +73,7 @@ func (e *entryRenderer) buildSelection() {
 
 	// Convert column, row into x,y
 	getCoordinates := func(column int, row int) (int, int) {
-		sz := textRenderer.lineSize(column, row)
+		sz := textRenderer.lineSizeToColumn(column, row)
 		return sz.Width + theme.Padding()*2, sz.Height*row + theme.Padding()*2
 	}
 
@@ -133,7 +133,7 @@ func (e *entryRenderer) buildSelection() {
 func (e *entryRenderer) moveCursor() {
 	textRenderer := Renderer(e.text).(*textRenderer)
 	e.entry.RLock()
-	size := textRenderer.lineSize(e.entry.CursorColumn, e.entry.CursorRow)
+	size := textRenderer.lineSizeToColumn(e.entry.CursorColumn, e.entry.CursorRow)
 	xPos := size.Width
 	yPos := size.Height * e.entry.CursorRow
 	e.entry.RUnlock()
@@ -217,6 +217,12 @@ func (e *entryRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (e *entryRenderer) Destroy() {
+	if e.entry.popUp != nil {
+		c := fyne.CurrentApp().Driver().CanvasForObject(e.entry)
+		c.SetOverlay(nil)
+		Renderer(e.entry.popUp).Destroy()
+		e.entry.popUp = nil
+	}
 }
 
 // Declare conformity with interfaces
@@ -252,6 +258,7 @@ type Entry struct {
 
 	// selecting indicates whether the cursor has moved since it was at the selection start location
 	selecting bool
+	popUp     *PopUp
 	// TODO: Add OnSelectChanged
 }
 
@@ -288,6 +295,9 @@ func (e *Entry) Hide() {
 	if e.focused {
 		fyne.CurrentApp().Driver().CanvasForObject(e).Focus(nil)
 	}
+	if e.popUp != nil {
+		e.popUp.Hide()
+	}
 	e.hide(e)
 }
 
@@ -302,6 +312,15 @@ func (e *Entry) SetText(text string) {
 		e.CursorRow = 0
 		e.Unlock()
 		Renderer(e).(*entryRenderer).moveCursor()
+	} else {
+		provider := e.textProvider()
+		if e.CursorRow >= provider.rows() {
+			e.CursorRow = provider.rows() - 1
+		}
+		rowLength := provider.rowLength(e.CursorRow)
+		if e.CursorColumn >= rowLength {
+			e.CursorColumn = rowLength
+		}
 	}
 }
 
@@ -451,8 +470,69 @@ func (e *Entry) Tapped(ev *fyne.PointEvent) {
 	e.updateMousePointer(ev, false)
 }
 
-// TappedSecondary is called when right or alternative tap is invoked - this is currently ignored.
-func (e *Entry) TappedSecondary(_ *fyne.PointEvent) {
+// pasteFromClipboard inserts text from the clipboard content,
+// starting from the cursor position.
+func (e *Entry) pasteFromClipboard(clipboard fyne.Clipboard) {
+	if e.selecting {
+		e.eraseSelection()
+	}
+	text := clipboard.Content()
+	if !e.MultiLine {
+		// format clipboard content to be compatible with single line entry
+		text = strings.Replace(text, "\n", " ", -1)
+	}
+	provider := e.textProvider()
+	runes := []rune(text)
+	provider.insertAt(e.cursorTextPos(), runes)
+
+	newlines := strings.Count(text, "\n")
+	if newlines == 0 {
+		e.CursorColumn += len(runes)
+	} else {
+		e.CursorRow += newlines
+		lastNewline := strings.LastIndex(text, "\n")
+		e.CursorColumn = len(runes) - lastNewline - 1
+	}
+	e.updateText(provider.String())
+	Renderer(e).(*entryRenderer).moveCursor()
+}
+
+// selectAll selects all text in entry
+func (e *Entry) selectAll() {
+	e.Lock()
+	e.selectRow = 0
+	e.selectColumn = 0
+
+	lastRow := e.textProvider().rows() - 1
+	e.CursorColumn = e.textProvider().rowLength(lastRow)
+	e.CursorRow = lastRow
+	e.selecting = true
+	e.Unlock()
+
+	Renderer(e).(*entryRenderer).moveCursor()
+}
+
+// TappedSecondary is called when right or alternative tap is invoked.
+//
+// Opens the PopUpMenu with `Paste` item to paste text from the clipboard.
+func (e *Entry) TappedSecondary(pe *fyne.PointEvent) {
+	if e.ReadOnly {
+		return
+	}
+
+	c := fyne.CurrentApp().Driver().CanvasForObject(e)
+
+	pasteItem := fyne.NewMenuItem("Paste", func() {
+		clipboard := fyne.CurrentApp().Driver().AllWindows()[0].Clipboard()
+		e.pasteFromClipboard(clipboard)
+	})
+	selectAllItem := fyne.NewMenuItem("Select all", e.selectAll)
+	e.popUp = NewPopUpMenu(fyne.NewMenu("", pasteItem, selectAllItem), c)
+
+	entryPos := fyne.CurrentApp().Driver().AbsolutePositionForObject(e)
+	popUpPos := entryPos.Add(fyne.NewPos(pe.Position.X, pe.Position.Y))
+
+	e.popUp.Move(popUpPos)
 }
 
 // MouseDown called on mouse click, this triggers a mouse click which can move the cursor,
@@ -594,6 +674,11 @@ func (e *Entry) TypedRune(r rune) {
 	if e.ReadOnly {
 		return
 	}
+
+	if e.popUp != nil {
+		e.popUp.Hide()
+	}
+
 	provider := e.textProvider()
 
 	// if we've typed a character and we're selecting then replace the selection with the character
@@ -943,29 +1028,11 @@ func (e *Entry) registerShortcut() {
 		copy.Clipboard.SetContent(text)
 	})
 	e.shortcut.AddShortcut(&fyne.ShortcutPaste{}, func(se fyne.Shortcut) {
-		if e.selecting {
-			e.eraseSelection()
-		}
 		paste := se.(*fyne.ShortcutPaste)
-		text := paste.Clipboard.Content()
-		if !e.MultiLine {
-			// format clipboard content to be compatible with single line entry
-			text = strings.Replace(text, "\n", " ", -1)
-		}
-		provider := e.textProvider()
-		runes := []rune(text)
-		provider.insertAt(e.cursorTextPos(), runes)
-
-		newlines := strings.Count(text, "\n")
-		if newlines == 0 {
-			e.CursorColumn += len(runes)
-		} else {
-			e.CursorRow += newlines
-			lastNewline := strings.LastIndex(text, "\n")
-			e.CursorColumn = len(runes) - lastNewline - 1
-		}
-		e.updateText(provider.String())
-		Renderer(e).(*entryRenderer).moveCursor()
+		e.pasteFromClipboard(paste.Clipboard)
+	})
+	e.shortcut.AddShortcut(&fyne.ShortcutSelectAll{}, func(se fyne.Shortcut) {
+		e.selectAll()
 	})
 }
 

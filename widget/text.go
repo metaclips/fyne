@@ -116,6 +116,9 @@ func (t *textProvider) updateRowBounds() {
 // t.updateRowBounds()
 // t.refreshTextRenderer()
 func (t *textProvider) refreshTextRenderer() {
+	if t.presenter == nil {
+		return // not yet shown
+	}
 	obj := t.presenter.object()
 	if obj == nil {
 		obj = t
@@ -174,8 +177,19 @@ func (t *textProvider) rows() int {
 // Row returns the characters in the row specified.
 // The row parameter should be between 0 and t.Rows()-1.
 func (t *textProvider) row(row int) []rune {
+	if row < 0 || row >= t.rows() {
+		return nil
+	}
 	bounds := t.rowBounds[row]
-	return t.buffer[bounds[0]:bounds[1]]
+	from := bounds[0]
+	to := bounds[1]
+	if from < 0 || to > len(t.buffer) {
+		return nil
+	}
+	if to < from {
+		return nil
+	}
+	return t.buffer[from:to]
 }
 
 // RowLength returns the number of visible characters in the row specified.
@@ -243,6 +257,7 @@ func (r *textRenderer) ApplyTheme() {
 	}
 	for _, text := range r.texts {
 		text.Color = c
+		text.TextSize = theme.TextSize()
 	}
 }
 
@@ -294,23 +309,27 @@ func (r *textRenderer) BackgroundColor() color.Color {
 	return color.Transparent
 }
 
-// lineSize returns the rendered size for the line specified by col and row
-func (r *textRenderer) lineSize(col, row int) (size fyne.Size) {
+// lineSizeToColumn returns the rendered size for the line specified by row up to the col position
+func (r *textRenderer) lineSizeToColumn(col, row int) (size fyne.Size) {
 	text := r.provider
 
 	line := text.row(row)
+	if line == nil {
+		return fyne.NewSize(0, 0)
+	}
 
 	if col >= len(line) {
 		col = len(line)
 	}
-	lineCopy := *r.texts[row]
+
+	measureText := string(line[0:col])
 	if r.provider.presenter.password() {
-		lineCopy.Text = strings.Repeat(passwordChar, col)
-	} else {
-		lineCopy.Text = string(line[0:col])
+		measureText = strings.Repeat(passwordChar, col)
 	}
 
-	return lineCopy.MinSize()
+	label := canvas.NewText(measureText, theme.TextColor())
+	label.TextStyle = r.provider.presenter.textStyle()
+	return label.MinSize()
 }
 
 func (r *textRenderer) Destroy() {

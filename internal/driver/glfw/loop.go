@@ -93,30 +93,18 @@ func (d *gLDriver) runGL() {
 					// remove window from window list
 					viewport.Destroy()
 
-					if w.master {
-						d.Quit()
-					}
+					go w.destroy(d)
 					continue
 				} else {
 					newWindows = append(newWindows, win)
 				}
 
 				canvas := w.canvas
-				if !canvas.isDirty() {
+				if !canvas.isDirty() || !w.visible {
 					continue
 				}
 
-				w.RunWithContext(func() {
-					d.freeDirtyTextures(canvas)
-
-					updateGLContext(w)
-					if canvas.ensureMinSize() {
-						w.fitContent()
-					}
-					canvas.paint(canvas.Size())
-
-					w.viewport.SwapBuffers()
-				})
+				d.repaintWindow(w)
 			}
 			if reassign {
 				d.windows = newWindows
@@ -125,13 +113,27 @@ func (d *gLDriver) runGL() {
 	}
 }
 
+func (d *gLDriver) repaintWindow(w *window) {
+	canvas := w.canvas
+	w.RunWithContext(func() {
+		d.freeDirtyTextures(canvas)
+
+		updateGLContext(w)
+		if canvas.ensureMinSize() {
+			w.fitContent()
+		}
+		canvas.paint(canvas.Size())
+
+		w.viewport.SwapBuffers()
+	})
+}
+
 func (d *gLDriver) freeDirtyTextures(canvas *glCanvas) {
 	for {
 		select {
 		case object := <-canvas.refreshQueue:
 			freeWalked := func(obj fyne.CanvasObject, _ fyne.Position, _ fyne.Position, _ fyne.Size) bool {
 				canvas.painter.Free(obj)
-				delete(canvas.minSizes, obj)
 				return false
 			}
 			driver.WalkCompleteObjectTree(object, freeWalked, nil)

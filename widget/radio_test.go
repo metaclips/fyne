@@ -18,11 +18,11 @@ func TestRadio_MinSize(t *testing.T) {
 	assert.True(t, min.Width > theme.Padding()*2)
 	assert.True(t, min.Height > theme.Padding()*2)
 
-	radio2 := NewRadio([]string{"Hi", "He"}, nil)
+	radio2 := NewRadio([]string{"Hi", "H"}, nil)
 	min2 := radio2.MinSize()
 
 	assert.Equal(t, min.Width, min2.Width)
-	assert.True(t, min2.Height > min.Height)
+	assert.Greater(t, min2.Height, min.Height)
 }
 
 func TestRadio_BackgroundStyle(t *testing.T) {
@@ -120,7 +120,7 @@ func TestRadio_SelectedNone(t *testing.T) {
 	radio.Tapped(&fyne.PointEvent{Position: fyne.NewPos(0, -2)})
 	assert.Equal(t, "", selected)
 
-	radio.Tapped(&fyne.PointEvent{Position: fyne.NewPos(0, 25)})
+	radio.Tapped(&fyne.PointEvent{Position: fyne.NewPos(0, radio.size.Height-2)})
 	assert.Equal(t, "", selected)
 }
 
@@ -339,4 +339,19 @@ func TestRadio_FocusIndicator_Centered_Vertically(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRadioRenderer_ApplyTheme(t *testing.T) {
+	radio := NewRadio([]string{"Test"}, func(string) {})
+	render := Renderer(radio).(*radioRenderer)
+
+	item := render.items[0]
+	textSize := item.label.TextSize
+	customTextSize := textSize
+	withTestTheme(func() {
+		render.ApplyTheme()
+		customTextSize = item.label.TextSize
+	})
+
+	assert.NotEqual(t, textSize, customTextSize)
 }
